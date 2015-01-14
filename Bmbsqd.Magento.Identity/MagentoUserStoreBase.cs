@@ -2,49 +2,49 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
+using Bmbsqd.Caching;
 using Bmbsqd.Magento.WebService;
 using Microsoft.AspNet.Identity;
 
 namespace Bmbsqd.Magento.Identity
 {
-	public abstract class MagentoUserStoreBase<TUser> :
+	public abstract class MagentoUserStoreBase
+	{
+		protected static readonly Task<IList<Claim>> _emptyClaimsTask = Task.FromResult<IList<Claim>>( new Claim[0] );
+	}
+
+	public abstract class MagentoUserStoreBase<TUser> : MagentoUserStoreBase,
 		IUserStore<TUser>,
 		IUserEmailStore<TUser>,
-		IPasswordHasher,
 		IUserPasswordStore<TUser>,
-		IUserRoleStore<TUser>
+		IUserRoleStore<TUser>,
+		IUserClaimStore<TUser>
 		where TUser : MagentoUser
 	{
-		private readonly IMagentoSessionFactory _sessionFactory;
-		private Task<IDictionary<int, string>> _groupMapTask;
-		private Task<IMagentoSession> _sessionTask;
+		protected readonly IMagentoSessionFactory _sessionFactory;
+		private readonly ISingleAsyncCache<IDictionary<int, string>> _groupsCache;
 
 		protected MagentoUserStoreBase( IMagentoSessionFactory sessionFactory )
 		{
 			_sessionFactory = sessionFactory;
-		}
-
-		private Task<IMagentoSession> LoginAsync()
-		{
-			return _sessionFactory.CreateSessionAsync();
-		}
-
-		protected Task<IMagentoSession> Session
-		{
-			get { return _sessionTask ?? (_sessionTask = LoginAsync()); }
+			_groupsCache = new SingleAsyncCache<IDictionary<int, string>>( TimeSpan.FromMinutes( 20 ) );
 		}
 
 		protected virtual Task<IDictionary<int, string>> AllGroups
 		{
-			get { return _groupMapTask ?? (_groupMapTask = Session.Then( session => session.ListCustomerGroupsAsync() )); }
+			get
+			{
+				return _groupsCache.GetOrAddAsync( () => _sessionFactory.CreateSessionAsync().Then( session => session.ListCustomerGroupsAsync() ) );
+			}
 		}
 
 		protected abstract Task<TUser> CreateUser( IMagentoCustomer customer );
 
 		public virtual void Dispose()
 		{
-			Session
+			_sessionFactory.CreateSessionAsync()
 				.Then( session => session.DisposeAsync() )
 				.Wait();
 		}
@@ -68,7 +68,7 @@ namespace Bmbsqd.Magento.Identity
 		{
 			int customerId;
 			if( int.TryParse( userId, out customerId ) ) {
-				var customer = await Session.Then( session => session.GetCustomerByIdAsync( customerId ) );
+				var customer = await _sessionFactory.CreateSessionAsync().Then( session => session.GetCustomerByIdAsync( customerId ) );
 				if( customer != null ) {
 					return await CreateUser( customer );
 				}
@@ -79,18 +79,6 @@ namespace Bmbsqd.Magento.Identity
 		public virtual Task<TUser> FindByNameAsync( string userName )
 		{
 			return FindByEmailAsync( userName );
-		}
-
-		public virtual string HashPassword( string password )
-		{
-			return password;
-		}
-
-		public virtual PasswordVerificationResult VerifyHashedPassword( string hashedPassword, string providedPassword )
-		{
-			return MagentoPasswordValidator.ValidatePassword( hashedPassword, providedPassword )
-				? PasswordVerificationResult.Success
-				: PasswordVerificationResult.Failed;
 		}
 
 		public virtual Task SetPasswordHashAsync( TUser user, string passwordHash )
@@ -131,7 +119,7 @@ namespace Bmbsqd.Magento.Identity
 		public virtual Task SetEmailAsync( TUser user, string email )
 		{
 			// TODO: user object email address must be changed
-			return Session.Then( async session => {
+			return _sessionFactory.CreateSessionAsync().Then( async session => {
 				var success = await session.UpdateCustomerAsync( user.CustomerId, new CustomerEntityToCreate {
 					Email = email
 				} );
@@ -158,7 +146,7 @@ namespace Bmbsqd.Magento.Identity
 
 		public virtual async Task<TUser> FindByEmailAsync( string email )
 		{
-			var customers = await Session.Then( session => session.FindCustomersAsync( new CustomerFilter { Email = email } ) );
+			var customers = await _sessionFactory.CreateSessionAsync().Then( session => session.FindCustomersAsync( new CustomerFilter { Email = email } ) );
 			if( customers.Count == 1 ) {
 				return await CreateUser( customers[0] );
 			}
@@ -167,6 +155,21 @@ namespace Bmbsqd.Magento.Identity
 				Trace.WriteLine( "Multiple customers matched " + email );
 			}
 			return null;
+		}
+
+		public virtual Task<IList<Claim>> GetClaimsAsync( TUser user )
+		{
+			return _emptyClaimsTask;
+		}
+
+		public Task AddClaimAsync( TUser user, Claim claim )
+		{
+			throw new NotImplementedException();
+		}
+
+		public Task RemoveClaimAsync( TUser user, Claim claim )
+		{
+			throw new NotImplementedException();
 		}
 	}
 }

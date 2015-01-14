@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 
 namespace Bmbsqd.Magento.Identity
 {
-	public static class TaskExtensions
+	internal static class TaskExtensions
 	{
 		public static async Task<TResult> Then<T, TResult>( this Task<T> task, Func<T, Task<TResult>> then )
 		{

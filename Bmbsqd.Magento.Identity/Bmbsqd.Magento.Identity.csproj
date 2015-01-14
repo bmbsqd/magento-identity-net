@@ -37,6 +37,7 @@
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="MagentoPasswordHasher.cs" />
     <Compile Include="MagentoUserStore.cs" />
     <Compile Include="MagentoUserStoreBase.cs" />
     <Compile Include="MagentoUser.cs" />
@@ -44,6 +45,10 @@
     <Compile Include="TaskExtensions.cs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Bmbsqd.Caching\Bmbsqd.Caching\Bmbsqd.Caching.csproj">
+      <Project>{B6BC0691-31CE-4450-B610-7DEC934A727A}</Project>
+      <Name>Bmbsqd.Caching</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\Bmbsqd.Magento\Bmbsqd.Magento\Bmbsqd.Magento.csproj">
       <Project>{4D6AC4BF-7FE0-4E8F-B6EC-90DAF973AC1F}</Project>
       <Name>Bmbsqd.Magento</Name>
